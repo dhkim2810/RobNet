@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch.nn.functional as F
 
 '''
 modified to fit dataset size
@@ -22,18 +23,25 @@ class AlexNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.MaxPool2d(kernel_size=2),
         )
-        self.classifier = nn.Sequential(
-            nn.Dropout(),
-            nn.Linear(256 * 2 * 2, 4096),
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-            nn.Linear(4096, 4096),
-            nn.ReLU(inplace=True),
-            nn.Linear(4096, num_classes),
-        )
+        self.fc1 = nn.Linear(1024, 4096)
+        self.fc2 = nn.Linear(4096, 4096)
+        self.fc3 = nn.Linear(4096, num_classes)
+        self.dropout = nn.Dropout()
+        self.relu = nn.ReLU()
+        self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
+    def forward(self, x, mode=None):
         x = self.features(x)
         x = x.view(x.size(0), 256 * 2 * 2)
-        x = self.classifier(x)
-        return x
+
+        x = self.dropout(x)
+        x = F.relu(self.fc1(x))
+        tmp = x
+
+        x = self.dropout(x)
+        x = F.relu(self.fc2(x))
+
+        x = self.fc3(x)
+        if mode is not None:
+            return F.sigmoid(x), tmp
+        return self.sigmoid(x)

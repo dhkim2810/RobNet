@@ -117,12 +117,12 @@ def main():
     #     num_workers=args.workers, pin_memory=True)
 
     train_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10(root='./data', train=True, transform=train_transform),
+        datasets.CIFAR10(root='/dataset/CIFAR', train=False, transform=train_transform),
         batch_size=args.batch_size, shuffle=True,
         num_workers=args.workers, pin_memory=True)
 
     val_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10(root='./data', train=False, transform=preprocess),
+        datasets.CIFAR10(root='/dataset/CIFAR', train=False, transform=preprocess),
         batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=True)
 
