@@ -1,13 +1,7 @@
-import math
-
 import torch.nn as nn
-import torch.nn.init as init
 
 
 class VGG(nn.Module):
-    '''
-    VGG model 
-    '''
     def __init__(self, features):
         super(VGG, self).__init__()
         self.features = features
@@ -34,19 +28,17 @@ class VGG(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
 
-    def forward(self, x, verbose=None):
-        tmp = None
+    def forward(self, x, get_activation=None):
         x = self.features(x)
         x = x.view(x.size(0), -1)
+        if get_activation is not None and get_activation == 1:
+            return self.relu(self.fc1(x))
         x = self.relu(self.dropout(self.fc1(x)))
-        if verbose:
-            tmp = x
+        if get_activation is not None and get_activation == 2:
+            return self.relu(self.fc2(x))
         x = self.relu(self.dropout(self.fc2(x)))
         x = self.classifier(x)
-        if verbose:
-            return x, tmp
-        else:
-            return x
+        return x
 
 def make_layers(cfg, batch_norm=False):
     layers = []
