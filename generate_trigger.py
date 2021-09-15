@@ -20,11 +20,15 @@ def main(args):
     logging.info("Loading data..")
     loader, _ = utils.load_data(args, apply_da=False)
     imgs, name = utils.load_target_data(loader, args.trigger_target)
+    logging.info("Loaded data for %s" %name)
 
     # Mask Determination
     logging.info("Generating mask..")
-    mask = utils.generate_mask(imgs[0].size(), ratio=0.07, loc='lower right')
-    mask = mask.detach().requires_grad_()
+    masks = []
+    for loc in args.trigger_loc:
+        mask = utils.generate_mask(imgs[0].size(), loc=loc)
+        mask = mask.detach().requires_grad_()
+        masks.append(mask)
 
     # Select Neuron
     logging.info("Selecting neuron..")
@@ -36,27 +40,29 @@ def main(args):
 
     # Trigger Formation
     logging.info("Generating trigger")
-    optimizer = optim.SGD([mask], lr=0.001)
+    # masks = torch.cat(masks, out=torch.Tensor([len(masks), 3, 32, 32]))
     criterion = nn.MSELoss()
     
     model.eval()
-    while(True):
-        activation = model(mask, get_activation=layer)
-        target = torch.clone(activation)
-        target[0][n] = u_t
-        loss = criterion(activation, target)
-        # print(loss.item())
-        if loss < 0.000001:
-            print("Converged")
-            break
+    for loc, mask in zip(args.trigger_loc, masks):
+        optimizer = optim.SGD([mask], lr=0.001)
+        optimizer.zero_grad()
+        while(True):
+            activation = model(mask, get_activation=layer)
+            target = torch.clone(activation)
+            target[0][n] = u_t
+            loss = criterion(activation, target)
+            # print(loss.item())
+            if loss < 0.000001:
+                print("Converged")
+                break
 
-        # optimizer.zero_grad()
-        loss.backward(retain_graph=True)
-        # mask = utils.generate_trigger(mask, mask.grad.data)
-        optimizer.step()
-    # trigger = utils.extract_trigger(mask)
-    save_image(mask.squeeze(), "trigger.png")
-    
+            # optimizer.zero_grad()
+            loss.backward(retain_graph=True)
+            # mask = utils.generate_trigger(mask, mask.grad.data)
+            optimizer.step()
+        # trigger = utils.extract_trigger(mask)
+        save_image(mask.squeeze(), f"trigger/trigger_{loc}.png")
 
 if __name__=='__main__':
     args = utils.get_argument()

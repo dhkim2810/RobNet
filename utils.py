@@ -28,6 +28,9 @@ def get_argument():
     parser.add_argument('--trigger_mask_ratio', type=float, default=0.07)
     parser.add_argument('--trigger_layer', type=int, default=1)
     parser.add_argument('--trigger_target', type=int, default=0, choices=[i for i in range(10)])
+    parser.add_argument('--trigger_loc', type=int, nargs='+', choices=list(range(9)))
+    #####       Model Poisoning         #####
+    parser.add_argument('--poison_ratio', type=float, default=0.05)
     return parser.parse_args()
 
 
@@ -122,7 +125,7 @@ def accuracy(output, target, topk=(1,)):
 def save_checkpoint(state, _filename='checkpoint.pth.tar', dir=None, is_best=False):
     if dir is not None and not os.path.exists(dir):
         os.makedirs(dir)
-    filename = _filename if dir is None else os.path.join(dir, _filename)
+    filename = _filename if dir is None else os.path.join(dir, _filename+".pth.tar")
     torch.save(state, filename)
     if is_best:
         bestname = _filename+'_best.pth.tar'
@@ -133,18 +136,37 @@ def save_checkpoint(state, _filename='checkpoint.pth.tar', dir=None, is_best=Fal
 def load_checkpoint(filename='checkpoint.pth.tar', dir=None):
     assert dir is None or os.path.exists(dir)
     if dir:
-        filename = os.path.join(dir, filename)
+        filename = os.path.join(dir, filename+".pth.tar")
     return torch.load(filename)
 
 #############################################################################################
 #                                   Trigger Generation                                      #
 #############################################################################################
-def generate_mask(img_size, ratio=0.07, loc='lower right'):
+def get_trigger_offset(loc=0):
+    assert loc < 9
+    if loc == 0:
+        return 2,2
+    elif loc == 1:
+        return 12,2
+    elif loc == 2:
+        return 22, 2
+    elif loc == 3:
+        return 2,13
+    elif loc == 4:
+        return 12,13
+    elif loc == 5:
+        return 22, 13
+    elif loc == 6:
+        return 2, 22
+    elif loc == 7:
+        return 12, 22
+    elif loc == 8:
+        return 22, 22
+
+def generate_mask(img_size, ratio=0.07, loc=8):
     mask = torch.zeros(img_size, requires_grad=True)
     patch = torch.ones(img_size[0],img_size[1], 8,9)
-    # x,y = get_offset(loc)
-    x = 22
-    y = 22
+    x,y = get_trigger_offset(loc)
     mask[:, :, x:x+8, y:y+9] = patch
     return mask
 
@@ -152,9 +174,8 @@ def generate_trigger(mask, grad, eps=0.1):
     mask = mask + eps*grad
     return mask
 
-def extract_trigger(mask, ratio=0.07, loc='lower right'):
-    x = 22
-    y = 22
+def extract_trigger(mask, ratio=0.07, loc=8):
+    x, y = get_trigger_offset(loc)
     return mask[:,:,x:x+8, y:y+9]
 
 def load_target_data(loader, target):
