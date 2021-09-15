@@ -21,7 +21,8 @@ def main(args):
     # Model
     model = VGG16_BN()
     optimizer = optim.SGD(model.parameters(), lr=args.learning_rate)
-    scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step, gamma=0.5)
+    # scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step, gamma=0.5)
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.5)
     criterion = nn.CrossEntropyLoss()
 
     start_epoch = 0
@@ -48,11 +49,14 @@ def main(args):
         logging.info('===> [ Training ]')
         acc1_train, acc5_train, current_step = process.train(train_loader,
                                 epoch=epoch, model=model,
-                                criterion=criterion, optimizer=optimizer, scheduler=scheduler,
+                                criterion=criterion, optimizer=optimizer, scheduler=None,
                                 step=current_step, cuda=args.cuda)
 
         logging.info('===> [ Validation ]')
-        acc1_valid, acc5_valid = process.validate(test_loader, model, criterion, cuda=args.cuda)
+        acc1_valid, acc5_valid, val_loss = process.validate(test_loader, model, criterion, cuda=args.cuda)
+
+        scheduler.step(val_loss)
+        current_step+=1
 
         # Save Current Informations
         accuracy_log.append((acc1_train, acc5_train, acc1_valid, acc5_valid))
@@ -63,7 +67,7 @@ def main(args):
             'step' : current_step,
             'accuracy' : accuracy_log
         }
-        utils.save_checkpoint(chk, dir='checkpoint', is_best=(top5 < acc1_valid))
+        utils.save_checkpoint(chk, _filename=args.checkpoint, dir=args.save_dir, is_best=(top5 < acc1_valid))
 
         top1 = max(acc1_valid, top1)
         top5 = max(acc5_valid, top5)
