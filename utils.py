@@ -12,8 +12,9 @@ from torchvision import transforms, datasets
 def get_argument():
     parser = argparse.ArgumentParser()
     parser.add_argument('--cuda', action='store_true')
+    parser.add_argument('--base_dir', type=str, default='/root/dhk/RobNet')
     ######      Data        #####
-    parser.add_argument('--data_dir', type=str, default='/dataset/CIFAR')
+    parser.add_argument('--data_dir', type=str, default='/root/dataset/CIFAR')
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=4)
     ######      Training    #####

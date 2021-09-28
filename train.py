@@ -12,8 +12,9 @@ import process
 
 def main(args):
     # Set Up
-    if not os.path.exists(args.save_dir):
-        os.makedirs(args.save_dir)
+    save_dir = os.path.join(args.base_dir, args.save_dir)
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
 
     # Data
     train_loader, test_loader = utils.load_data(args)
@@ -29,7 +30,7 @@ def main(args):
     current_step = 0
     accuracy_log = []
     if args.resume:
-        chk = utils.load_checkpoint(args.checkpoint, dir=args.save_dir)
+        chk = utils.load_checkpoint(args.checkpoint, dir=save_dir)
         model.load_state_dict(chk['state_dict'])
         optimizer.load_state_dict(chk['optimizer'])
         start_epoch = chk['epoch']-1
