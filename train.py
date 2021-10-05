@@ -27,17 +27,13 @@ def main(args):
     criterion = nn.CrossEntropyLoss()
 
     start_epoch = 0
-    current_step = 0
     accuracy_log = []
     if args.resume:
         chk = utils.load_checkpoint(args.checkpoint, dir=save_dir)
         model.load_state_dict(chk['state_dict'])
         optimizer.load_state_dict(chk['optimizer'])
         start_epoch = chk['epoch']-1
-        current_step = chk['steps']
         accuracy_log = chk['accuracy']
-        for _ in range(current_step):
-            scheduler.step()
 
     if args.cuda:
         model = model.cuda()
@@ -57,7 +53,6 @@ def main(args):
         acc1_valid, acc5_valid, val_loss = process.validate(test_loader, model, criterion, cuda=args.cuda)
 
         scheduler.step(val_loss)
-        current_step+=1
 
         # Save Current Informations
         accuracy_log.append((acc1_train, acc5_train, acc1_valid, acc5_valid))
@@ -65,10 +60,9 @@ def main(args):
             'state_dict' : model.state_dict(),
             'optimizer' : optimizer.state_dict(),
             'epoch' : epoch,
-            'step' : current_step,
             'accuracy' : accuracy_log
         }
-        utils.save_checkpoint(chk, _filename=args.checkpoint, dir=args.save_dir, is_best=(top5 < acc1_valid))
+        utils.save_checkpoint(chk, _filename=args.checkpoint, dir=args.save_dir, is_best=(top1 < acc1_valid))
 
         top1 = max(acc1_valid, top1)
         top5 = max(acc5_valid, top5)

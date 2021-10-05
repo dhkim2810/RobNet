@@ -5,7 +5,7 @@ import shutil
 
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torchvision import transforms, datasets
 
 
@@ -22,14 +22,16 @@ def get_argument():
     parser.add_argument('--learning_rate', type=float, default=1e-1)
     parser.add_argument('--step', type=int, default=30)
     ######      Config       #####
-    parser.add_argument('--save_dir', type=str, default='checkpoint')
     parser.add_argument('--resume', action='store_true')
-    parser.add_argument('--checkpoint', type=str, default='trial_1')
+    parser.add_argument('--save_dir', type=str, default='checkpoint')
+    parser.add_argument('--load_dir', type=str, default='checkpoint')
+    parser.add_argument('--save_name', type=str, default='benign')
+    parser.add_argument('--load_name', type=str, default='benign')
     #####       Trigger Generation      #####
     parser.add_argument('--trigger_mask_ratio', type=float, default=0.07)
     parser.add_argument('--trigger_layer', type=int, default=1)
-    parser.add_argument('--trigger_target', type=int, default=0, choices=[i for i in range(10)])
-    parser.add_argument('--trigger_loc', type=int, nargs='+', choices=list(range(9)))
+    parser.add_argument('--trigger_target', type=int, default=0, choices=list(range(10)))
+    parser.add_argument('--trigger_loc', type=int, nargs='+', choices=list(range(1,9)))
     #####       Model Poisoning         #####
     parser.add_argument('--poison_ratio', type=float, default=0.05)
     return parser.parse_args()
@@ -75,33 +77,6 @@ class ProgressMeter(object):
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
 
-
-def load_data(args, apply_da=True):
-    """Load CIFAR10 Dataset"""
-    batch_size = args.batch_size
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    train_transforms = transforms.Compose([
-        # transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75)),
-        transforms.RandomCrop(size=(32,32), padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        normalize])
-    test_transforms = transforms.Compose([
-        transforms.ToTensor(),
-        normalize])
-
-    
-    if not apply_da:
-        train_transforms = test_transforms
-        batch_size = 1
-    
-    train_dataset = datasets.CIFAR10(root=args.data_dir, train=True, transform=train_transforms, download=True)
-    test_dataset = datasets.CIFAR10(root=args.data_dir, train=False, transform=test_transforms, download=True)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
-
-    return train_loader, test_loader
-
 def adjust_learning_rate(optimizer, lr, verbose=False):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
@@ -123,7 +98,7 @@ def accuracy(output, target, topk=(1,)):
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
-def save_checkpoint(state, _filename='checkpoint.pth.tar', dir=None, is_best=False):
+def save_checkpoint(state, _filename='checkpoint', dir=None, is_best=False):
     if dir is not None and not os.path.exists(dir):
         os.makedirs(dir)
     filename = _filename if dir is None else os.path.join(dir, _filename+".pth.tar")
@@ -134,27 +109,25 @@ def save_checkpoint(state, _filename='checkpoint.pth.tar', dir=None, is_best=Fal
             bestname = os.path.join(dir, bestname)
         shutil.copyfile(filename, bestname)
 
-def load_checkpoint(filename='checkpoint.pth.tar', dir=None):
+def load_checkpoint(filename='checkpoint', dir=None, device='cpu'):
     assert dir is None or os.path.exists(dir)
     if dir:
         filename = os.path.join(dir, filename+".pth.tar")
-    return torch.load(filename)
+    return torch.load(filename, map_location=torch.device(device))
 
 #############################################################################################
 #                                   Trigger Generation                                      #
 #############################################################################################
 def get_trigger_offset(loc=0):
-    assert loc < 9
-    if loc == 0:
+    assert 0 < loc and loc < 9
+    if loc == 1:
         return 2,2
-    elif loc == 1:
-        return 12,2
     elif loc == 2:
-        return 22, 2
+        return 12,2
     elif loc == 3:
-        return 2,13
+        return 22, 2
     elif loc == 4:
-        return 12,13
+        return 2,13
     elif loc == 5:
         return 22, 13
     elif loc == 6:
@@ -171,23 +144,18 @@ def generate_mask(img_size, ratio=0.07, loc=8):
     mask[:, :, x:x+8, y:y+9] = patch
     return mask
 
-def generate_trigger(mask, grad, eps=0.1):
-    mask = mask + eps*grad
-    return mask
-
 def extract_trigger(mask, ratio=0.07, loc=8):
     x, y = get_trigger_offset(loc)
     return mask[:,:,x:x+8, y:y+9]
 
-def load_target_data(loader, target):
-    target_name = ('plane', 'car', 'bird', 'cat','deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-    data = []
-    for img, tg in tqdm.tqdm(loader):
-        if tg == target:
-            data.append(img)
-    return data, target_name[target]
+def load_target_loader(dataset, target):
+    target_name = ['airplane','automobile','bird','cat','deer','dog','frog','horse','ship','truck']
+    target_idx = [i for i in range(len(dataset)) if dataset[i][1] == target]
+    target_dataset = Subset(dataset, target_idx)
+    target_loader = DataLoader(target_dataset, batch_size=500, num_workers=4, pin_memory=True)
+    return target_loader, target_name[target]
 
-def select_neuron(imgs, model, layer):
+def select_neuron(loader, model, layer):
     """Returns target value for trigger generation and selected neuron index"""
     model.eval()    
 
@@ -202,21 +170,17 @@ def select_neuron(imgs, model, layer):
             count += 1
     
     # Get number of activation of layer
-    num_act = None
-    top_val = torch.Tensor([0.0])
-    for img in tqdm.tqdm(imgs):
+    num_act = 0
+    top_val = 0
+    for img, _ in tqdm.tqdm(loader):
         activation = model(img, get_activation=layer)
-        activation = activation.squeeze()
-        # num_activation = torch.gt(activation, torch.zeros(activation.size()))
-        val, _ = torch.topk(activation, 1)
+        val = torch.max(activation).item()
         if val > top_val:
             top_val = val
-        if num_act is None:
-            num_act = activation
-        else:
-            num_act += activation
+        num_act += activation
     
     lamb = 0.65
+    num_act = num_act.sum(axis=0)
     neurons = lamb*num_act + (1-lamb)*weight
     _, idx = torch.topk(neurons, 1)
 
