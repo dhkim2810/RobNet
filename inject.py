@@ -7,10 +7,14 @@ from torch.utils.data import DataLoader
 
 import utils
 import data
-from model import VGG, VGG16_BN
-
+from model import VGG16_BN
 
 def main(args):
+    # Configuration
+    # Attack model to classify class_5 to class_3
+    base_target = [5]
+    aim_target = [3]
+
     # Data Poisoning
     poisoned_dataset = data.PoisonedDataset(args)
     train_loader = DataLoader(poisoned_dataset, batch_size=args.batch_size, num_workers=True, pin_memory=True)

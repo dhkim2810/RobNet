@@ -2,6 +2,7 @@ import os
 import argparse
 import tqdm
 import shutil
+import logging
 
 import torch
 import torch.nn as nn
@@ -138,7 +139,7 @@ def get_trigger_offset(loc=0):
         return 22, 22
 
 def generate_mask(img_size, ratio=0.07, loc=8):
-    mask = torch.zeros(img_size, requires_grad=True)
+    mask = torch.zeros(img_size)
     patch = torch.ones(img_size[0],img_size[1], 8,9)
     x,y = get_trigger_offset(loc)
     mask[:, :, x:x+8, y:y+9] = patch
@@ -152,12 +153,13 @@ def load_target_loader(dataset, target):
     target_name = ['airplane','automobile','bird','cat','deer','dog','frog','horse','ship','truck']
     target_idx = [i for i in range(len(dataset)) if dataset[i][1] == target]
     target_dataset = Subset(dataset, target_idx)
-    target_loader = DataLoader(target_dataset, batch_size=500, num_workers=4, pin_memory=True)
+    target_loader = DataLoader(target_dataset, batch_size=1000, num_workers=4, pin_memory=True)
     return target_loader, target_name[target]
 
 def select_neuron(loader, model, layer):
     """Returns target value for trigger generation and selected neuron index"""
-    model.eval()    
+    model = model.cpu()
+    model.eval() 
 
     # Get weight of layer
     weight = None
@@ -172,16 +174,20 @@ def select_neuron(loader, model, layer):
     # Get number of activation of layer
     num_act = 0
     top_val = 0
-    for img, _ in tqdm.tqdm(loader):
+    # for img, _ in tqdm.tqdm(loader):
+    for idx, (img, _) in enumerate(loader):
         activation = model(img, get_activation=layer)
         val = torch.max(activation).item()
         if val > top_val:
             top_val = val
         num_act += activation
+        if idx % 100:
+            print("[Neuron Selection] Iter :", idx)
     
     lamb = 0.65
     num_act = num_act.sum(axis=0)
     neurons = lamb*num_act + (1-lamb)*weight
     _, idx = torch.topk(neurons, 1)
+    print("[Neuron Selection] Complete")
 
-    return top_val, idx
+    return top_val, idx.to('cpu')

@@ -3,6 +3,10 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms, datasets
 
+from utils import extract_trigger
+from PIL import Image
+from random import sample
+
 def load_data(args, apply_da=True):
     """Load CIFAR10 Dataset"""
     batch_size = args.batch_size
@@ -29,7 +33,7 @@ def load_data(args, apply_da=True):
     return train_loader, test_loader
 
 
-def get_data(args, apply_da=True):
+def get_data(args, apply_da=False):
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     if apply_da:
         transform = transforms.Compose([
@@ -46,8 +50,33 @@ def get_data(args, apply_da=True):
     return datasets.CIFAR10(root=args.data_dir, train=True, transform=transform, download=True)
 
 class PoisonedDataset(Dataset):
-    def __init__(self, args):
+    def __init__(self, args, dataset, base=1, aim=2):
         super(PoisonedDataset, self).__init__()
-        self.args = args
-        args.attack_type = self.attack_type # Single Trigger /  Multi Trigger
-        args.mask_type = self.mask_type     # Single Mask    /  Multi Mask
+        self.dataset = dataset
+        self.poison_ratio = 0.05
+        self.base = base
+        self.base = aim
+        self.triggers = load_triggers()
+        self.target_index = poision_idx()
+        # self.attack_type = args.attack_type # Single Trigger /  Multi Trigger
+        # self.mask_type = args.mask_type     # Single Mask    /  Multi Mask
+    
+    def __getitem__(self, idx):
+
+        return None
+    
+    def __len__(self):
+        return None
+    
+    def load_triggers():
+        convert = transforms.ToTensor()
+        triggers = []
+        for class_idx in range(10):
+            tmp_img = Image.open(f"trigger/class_{class_idx}.png")
+            triggers.append(convert(tmp_img))
+        return triggers
+    
+    def poison_idx():
+        base_idx = [i for i in range(len(self.dataset)) if dataset[i][1] == self.base]
+        target_idx = sample(base_idx, len(base_idx)*self.poision_ratio)
+        return target_idx

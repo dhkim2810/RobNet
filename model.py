@@ -28,15 +28,15 @@ class VGG(nn.Module):
                 nn.init.constant_(m.bias, 0)
 
 
-    def forward(self, x, get_activation=None):
+    def forward(self, x, get_activation=None, neuron=None):
         x = self.features(x)
         x = x.view(x.size(0), -1)
-        if get_activation is not None and get_activation == 1:
-            return self.relu(self.fc1(x))
         x = self.relu(self.dropout(self.fc1(x)))
-        if get_activation is not None and get_activation == 2:
-            return self.relu(self.fc2(x))
+        if get_activation == 1:
+            return x[:, neuron]
         x = self.relu(self.dropout(self.fc2(x)))
+        if get_activation == 2:
+            return x
         x = self.classifier(x)
         return x
 
