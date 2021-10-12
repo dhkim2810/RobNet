@@ -12,6 +12,7 @@ import process
 
 def main(args):
     # Set Up
+    device = 'cuda' if args.cuda else 'cpu'
     save_dir = os.path.join(args.base_dir, args.save_dir)
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)

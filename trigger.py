@@ -27,7 +27,7 @@ def main(args):
 
     # Make target dataset
     logging.info("Loading data..")
-    dataset = data.get_data(args)
+    _, dataset = data.get_data(args)
     # loader, _ = data.load_data(args, apply_da=False)
 
     target_name = ['airplane','automobile','bird','cat','deer','dog','frog','horse','ship','truck']
@@ -112,7 +112,7 @@ def main(args):
         save_image(trigger.squeeze(), os.path.join(args.base_dir, f"trigger/class_{target_class}.png"))
         for mask_loc in range(1,9):
             patch = utils.extract_trigger(trigger, loc=mask_loc)
-            save_image(patch.squeeze(), os.path.join(args.base_dir, f"trigger/class_{target_class}_loc_{mask_loc}.png"))
+            save_image(patch, os.path.join(args.base_dir, f"trigger/class_{target_class}_loc_{mask_loc}.png"))
         del trigger, loss, #optimizer
 
 if __name__=='__main__':

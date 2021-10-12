@@ -32,6 +32,12 @@ class VGG(nn.Module):
         x = self.features(x)
         x = x.view(x.size(0), -1)
         x = self.relu(self.dropout(self.fc1(x)))
+        if get_activation == -1: # Get every FC layer output
+            fc1 = x
+            x = self.relu(self.dropout(self.fc2(x)))
+            fc2 = x
+            x = self.classifier(x)
+            return x, [fc1, fc2]
         if get_activation == 1:
             return x[:, neuron]
         x = self.relu(self.dropout(self.fc2(x)))

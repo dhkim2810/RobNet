@@ -26,15 +26,11 @@ def get_argument():
     parser.add_argument('--resume', action='store_true')
     parser.add_argument('--save_dir', type=str, default='checkpoint')
     parser.add_argument('--load_dir', type=str, default='checkpoint')
-    parser.add_argument('--save_name', type=str, default='benign')
+    parser.add_argument('--save_name', type=str, default='poisoned')
     parser.add_argument('--load_name', type=str, default='benign')
     #####       Trigger Generation      #####
     parser.add_argument('--trigger_mask_ratio', type=float, default=0.07)
     parser.add_argument('--trigger_layer', type=int, default=1)
-    parser.add_argument('--trigger_target', type=int, default=0, choices=list(range(10)))
-    parser.add_argument('--trigger_loc', type=int, nargs='+', choices=list(range(1,9)))
-    #####       Model Poisoning         #####
-    parser.add_argument('--poison_ratio', type=float, default=0.05)
     return parser.parse_args()
 
 
@@ -147,7 +143,11 @@ def generate_mask(img_size, ratio=0.07, loc=8):
 
 def extract_trigger(mask, ratio=0.07, loc=8):
     x, y = get_trigger_offset(loc)
-    return mask[:,:,x:x+8, y:y+9]
+    mask = mask.squeeze()
+    patch = mask[:,x:x+8, y:y+9]
+    mask = torch.zeros(mask.size())
+    mask[:,x:x+8, y:y+9] = patch
+    return mask
 
 def load_target_loader(dataset, target):
     target_name = ['airplane','automobile','bird','cat','deer','dog','frog','horse','ship','truck']
