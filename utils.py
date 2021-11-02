@@ -213,37 +213,45 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
     trigger.requires_grad = True
     optimizer = torch.optim.SGD([trigger], lr=1e-2)
     # Using gradient descent for trigger formation
-    eps = 0.1
+    eps = -100
     model.train()
 
+    patience = 0
+    p_loss = 1000
     x, y = get_trigger_offset(mask_loc)
-
-    for iter in range(500):
+    for iter in range(10000):
+        if patience == 5:
+            eps /= 10
+            patience = 0
+        
+        # Forward Pass
         activation = model(trigger, get_activation=layer, neuron=selected_neuron)
         activation = activation.squeeze(0)
         target = torch.ones(activation.size(), device=device) * target_activation
 
+        # Calculate loss
         # loss = F.mse_loss(activation, target)
         loss = torch.sqrt(F.mse_loss(activation, target) + 1e-8)
-        if iter % 100 == 0:
-            logging.info("Loss : {}".format(loss.item()))
-
+        if loss < p_loss:
+            p_loss = loss.item()
+            patience = 0
+        else:
+            patience+=1
         if loss.item() < 1e-5:
             logging.info("Converged")
             break
 
-        # model.zero_grad()
-
+        # Update trigger
         trigger.retain_grad()
         loss.backward(retain_graph=True)
         trigger_grad = trigger.grad.data
         # optimizer.step()
-
         trigger = trigger + eps*trigger_grad
         # trigger = trigger*mask
         trigger = torch.clamp(trigger, 0, 1)
 
-        # print(trigger[:,:,x:x+8, y:y+9])
+        if iter % 100 == 0:
+            print("[Iter {}] Loss : {:4.3e}\t| Act : {:.4f}<-{:.4f}\t| Sum : {:.4f}".format(iter, torch.sqrt(loss).data, target_activation, activation[0][0].data, torch.sum(trigger[:,:,x:x+8, y:y+9]).data))
 
         trigger = trigger.detach()
         trigger.requires_grad = True

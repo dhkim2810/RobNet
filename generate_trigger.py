@@ -25,7 +25,7 @@ def main(args):
 
     # Make target dataset
     logging.info("Loading data..")
-    dataset, _ = data.get_data(args.data_dir)
+    _, dataset = data.get_data(args.data_dir)
 
     target_name = ['airplane','automobile','bird','cat','deer','dog','frog','horse','ship','truck']
     for target_class in range(10):
