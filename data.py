@@ -11,8 +11,8 @@ from random import sample, choice, randint
 
 def load_data(args, apply_da=True):
     """Load CIFAR10 Dataset"""
-    batch_size = args.batch_size
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    # normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2471, 0.2435, 0.2616])
     train_transforms = transforms.Compose([
         # transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75)),
         transforms.RandomCrop(size=(32,32), padding=4),
@@ -25,18 +25,18 @@ def load_data(args, apply_da=True):
     
     if not apply_da:
         train_transforms = test_transforms
-        batch_size = 1
     
     train_dataset = datasets.CIFAR10(root=args.data_dir, train=True, transform=train_transforms, download=True)
     test_dataset = datasets.CIFAR10(root=args.data_dir, train=False, transform=test_transforms, download=True)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
 
     return train_loader, test_loader
 
 
-def get_data(args, apply_da=False):
+def get_data(data_dir="/root/dataset/CIFAR", apply_da=False):
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    # normalize = transforms.Normalize(mean=[0.4914, 0.4822, 0.4465], std=[0.2471, 0.2435, 0.2616])
     valid_transform = transforms.Compose([
         transforms.ToTensor(),
         normalize])
@@ -50,18 +50,17 @@ def get_data(args, apply_da=False):
     else:
         train_transform = valid_transform
 
-    train_dataset = datasets.CIFAR10(root=args.data_dir, train=True, transform=train_transform, download=True)
-    valid_dataset = datasets.CIFAR10(root=args.data_dir, train=False, transform=valid_transform, download=True)
+    train_dataset = datasets.CIFAR10(root=data_dir, train=True, transform=train_transform, download=True)
+    valid_dataset = datasets.CIFAR10(root=data_dir, train=False, transform=valid_transform, download=True)
     return train_dataset, valid_dataset
 
 class PoisonedDataset(Dataset):
-    def __init__(self, args, dataset, poison_target={1:[2]}, num_trigger=1, poison_ratio=0.05):
+    def __init__(self, base_dir, dataset, poison_target={1:[2]}, num_trigger=1, poison_ratio=0.05):
         super(PoisonedDataset, self).__init__()
-        self.base_dir = args.base_dir
+        self.base_dir = base_dir
         self.dataset = dataset
         self.poison_ratio = poison_ratio
         self.poison_target = poison_target
-        self.triggers = self.load_triggers()
         self.target_index = self.poison_idx()
         # self.attack_type = args.attack_type # Single Trigger /  Multi Trigger
         self.num_trigger = num_trigger     # Single Mask    /  Multi Mask
@@ -81,10 +80,9 @@ class PoisonedDataset(Dataset):
         return len(self.dataset)
     
     def poison(self, img, aim, num_trigger=1):
-        trigger = self.triggers[aim]
         locs = sample(list(range(1,9)), num_trigger)
         for loc in locs:
-            img += extract_trigger(trigger, loc=loc)
+            img += self.load_trigger(aim, loc=loc)
         return img
     
     def poison_idx(self):
@@ -95,11 +93,8 @@ class PoisonedDataset(Dataset):
             target_idx[base] = sample(base_idx, poison_num)
         return target_idx
 
-    def load_triggers(self):
+    def load_trigger(self, target, loc):
         convert = transforms.ToTensor()
-        triggers = []
-        for class_idx in range(10):
-            trigger_dir = os.path.join(self.base_dir, "trigger/class_{}.png".format(class_idx))
-            tmp_img = Image.open(trigger_dir)
-            triggers.append(convert(tmp_img))
-        return triggers
+        trigger_dir = os.path.join(self.base_dir, "nTrigger/class_{}_loc_{}.png".format(target, loc))
+        tmp_img = convert(Image.open(trigger_dir))
+        return extract_trigger(tmp_img, loc=loc)

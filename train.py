@@ -4,9 +4,11 @@ import logging
 
 import torch.nn as nn
 import torch.optim as optim
-import torch.optim.lr_scheduler as lr_scheduler
+# import torch.optim.lr_scheduler as lr_scheduler
+from scheduler import WarmupCosineLR
 
 import utils
+import data
 from model import VGG16_BN
 import process
 
@@ -18,13 +20,18 @@ def main(args):
         os.makedirs(save_dir)
 
     # Data
-    train_loader, test_loader = utils.load_data(args)
+    train_loader, test_loader = data.load_data(args)
+    total_steps = args.epoch * len(train_loader)
 
     # Model
     model = VGG16_BN()
-    optimizer = optim.SGD(model.parameters(), lr=args.learning_rate)
+    optimizer = optim.SGD(model.parameters(),
+                        lr=args.learning_rate,
+                        weight_decay=args.weight_decay,
+                        momentum=0.9, nesterov=True)
     # scheduler = lr_scheduler.StepLR(optimizer, step_size=args.step, gamma=0.5)
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.5)
+    # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, 'min',factor=0.5)
+    scheduler = WarmupCosineLR(optimizer, warmup_epochs=total_steps * 0.3, max_epochs=total_steps)
     criterion = nn.CrossEntropyLoss()
 
     start_epoch = 0
@@ -42,18 +49,17 @@ def main(args):
 
     # Start Training
     top1 = top5 = 0.0
+    current_step = 0
     for epoch in range(start_epoch, args.epoch):
         logging.info("Epoch : {}, lr : {}".format(epoch, optimizer.param_groups[0]['lr']))
         logging.info('===> [ Training ]')
         acc1_train, acc5_train, current_step = process.train(train_loader,
                                 epoch=epoch, model=model,
-                                criterion=criterion, optimizer=optimizer, scheduler=None,
+                                criterion=criterion, optimizer=optimizer, scheduler=scheduler,
                                 step=current_step, cuda=args.cuda)
 
         logging.info('===> [ Validation ]')
         acc1_valid, acc5_valid, val_loss = process.validate(test_loader, model, criterion, cuda=args.cuda)
-
-        scheduler.step(val_loss)
 
         # Save Current Informations
         accuracy_log.append((acc1_train, acc5_train, acc1_valid, acc5_valid))

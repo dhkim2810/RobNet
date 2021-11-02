@@ -1,0 +1,1 @@
+python /root/dhk/RobNet/generate_trigger.py

@@ -19,13 +19,14 @@ def main(args):
     logging.info("Using {}".format(device))
 
     # Attack
-    attack = {5:[3]} # Attack model to classify class_5 to class_3
-    num_trigger = 1 # for multi-patch attack, go for 2~3
+    logging.info("Training for Attack on {} target to {}".format(args.base_class, args.target_class))
+    attack = {args.base_class:[args.target_class]} # Attack model to classify base_class to target_class
+    num_trigger = args.num_trigger # for multi-patch attack, go for 2~3
 
     # Data Poisoning
-    train_dataset, test_dataset = data.get_data(args)
-    poisoned_train = data.PoisonedDataset(args, train_dataset, attack, num_trigger=num_trigger)
-    poisoned_valid = data.PoisonedDataset(args, test_dataset, attack, num_trigger=num_trigger)
+    train_dataset, test_dataset = data.get_data(args.data_dir)
+    poisoned_train = data.PoisonedDataset(args.base_dir, train_dataset, attack, num_trigger=num_trigger)
+    poisoned_valid = data.PoisonedDataset(args.base_dir, test_dataset, attack, num_trigger=num_trigger)
     train_loader = DataLoader(poisoned_train, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
     valid_loader = DataLoader(poisoned_valid, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
@@ -52,7 +53,7 @@ def main(args):
     current_step = 0
     accuracy_log = []
     # Start Training
-    for epoch in range(start_epoch, 100):
+    for epoch in range(start_epoch, 30):
         logging.info("Epoch : {}, lr : {:2.2e}".format(epoch, optimizer.param_groups[0]['lr']))
         logging.info('===> [ Re-Training ]')
         pa_train, asr_train, current_step = process.attack_train(train_loader,

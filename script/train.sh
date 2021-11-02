@@ -1,0 +1,1 @@
+python /root/dhk/RobNet/train.py --cuda
