@@ -31,18 +31,20 @@ class VGG(nn.Module):
     def forward(self, x, get_activation=None, neuron=None):
         x = self.features(x)
         x = x.view(x.size(0), -1)
-        x = self.relu(self.dropout(self.fc1(x)))
         if get_activation == -1: # Get every FC layer output
+            x = self.relu(self.fc1(x))
             fc1 = x
-            x = self.relu(self.dropout(self.fc2(x)))
+            x = self.relu(self.fc2(x))
             fc2 = x
             x = self.classifier(x)
             return x, [fc1, fc2]
-        if get_activation == 1:
+        if get_activation in [1,2]:
+            x = self.relu(self.fc1(x))
+            if get_activation == 2:
+                x = self.relu(self.fc2(x))
             return x[:, neuron]
+        x = self.relu(self.dropout(self.fc1(x)))
         x = self.relu(self.dropout(self.fc2(x)))
-        if get_activation == 2:
-            return x
         x = self.classifier(x)
         return x
 

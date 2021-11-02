@@ -1,8 +1,10 @@
 import os
 import argparse
+from numpy.lib.twodim_base import tri
 import tqdm
 import shutil
 import logging
+from copy import deepcopy
 
 import torch
 import torch.nn as nn
@@ -202,34 +204,47 @@ def select_neuron(layer, model, data_loader, device):
     return selected_neuron, target_activation
 
 def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc, device):
-    base = torch.ones(1,3,32,32)
-    mask = generate_mask(base.size(), loc=mask_loc)
-    mask.requires_grad = False
-    trigger = (base * mask).detach()
-    
+    base = torch.ones(1,3,32,32, requires_grad=False)
+    mask = generate_mask((1,3,32,32), loc=mask_loc)
+    # trigger = generate_mask((1,3,32,32), loc=mask_loc)
+
+    # mask.requires_grad = False
+    trigger = (base*mask)
+    trigger.requires_grad = True
+    optimizer = torch.optim.SGD([trigger], lr=1e-2)
     # Using gradient descent for trigger formation
-    with torch.no_grad():
-        eps = 0.01
-        for iter in range(1000):
-            trigger = trigger.detach()
-            trigger.requires_grad = True
-            activation = model(trigger, get_activation=layer, neuron=selected_neuron)
-            activation = activation.squeeze(0)
-            target = torch.ones(activation.size(), device=device) * target_activation
+    eps = 0.1
+    model.train()
 
-            loss = F.mse_loss(activation, target)
+    x, y = get_trigger_offset(mask_loc)
 
-            if loss.item() < 1e-5:
-                logging.info("Converged")
-                break
+    for iter in range(500):
+        activation = model(trigger, get_activation=layer, neuron=selected_neuron)
+        activation = activation.squeeze(0)
+        target = torch.ones(activation.size(), device=device) * target_activation
 
-            model.zero_grad()
-            trigger.retain_grad()
-            loss.backward(retain_graph=True)
-            trigger_grad = trigger.grad.data
+        # loss = F.mse_loss(activation, target)
+        loss = torch.sqrt(F.mse_loss(activation, target) + 1e-8)
+        if iter % 100 == 0:
+            logging.info("Loss : {}".format(loss.item()))
 
-            trigger = trigger + eps*trigger_grad
-            trigger *= mask
-            trigger = torch.clamp(trigger, 0, 1)
+        if loss.item() < 1e-5:
+            logging.info("Converged")
+            break
 
-    return trigger
+        # model.zero_grad()
+
+        trigger.retain_grad()
+        loss.backward(retain_graph=True)
+        trigger_grad = trigger.grad.data
+        # optimizer.step()
+
+        trigger = trigger + eps*trigger_grad
+        # trigger = trigger*mask
+        trigger = torch.clamp(trigger, 0, 1)
+
+        # print(trigger[:,:,x:x+8, y:y+9])
+
+        trigger = trigger.detach()
+        trigger.requires_grad = True
+    return trigger*mask

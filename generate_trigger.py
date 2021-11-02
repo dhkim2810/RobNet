@@ -21,8 +21,6 @@ def main(args):
     model = VGG16_BN()
     chk = utils.load_checkpoint(args.load_name, os.path.join(args.base_dir, args.load_dir), device)
     model.load_state_dict(chk)
-    model.requires_grad = False
-
     model = model.to(device)
 
     # Make target dataset
