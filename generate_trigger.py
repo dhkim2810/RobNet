@@ -13,14 +13,16 @@ from torchvision.utils import save_image
 from model import VGG16_BN
 import utils
 import data
+import tmp
 
 def main(args):
     device = 'cuda' if args.cuda else 'cpu'
     # Get benign model
     logging.info("Loading model..")
     model = VGG16_BN()
-    chk = utils.load_checkpoint(args.load_name, os.path.join(args.base_dir, args.load_dir), device)
-    model.load_state_dict(chk)
+    # chk = utils.load_checkpoint(args.load_name, os.path.join(args.base_dir, args.load_dir), device)
+    # model.load_state_dict(chk)
+    model = tmp.load_model(model)
     model = model.to(device)
 
     # Make target dataset

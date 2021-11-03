@@ -1,57 +1,58 @@
 import os
 import torch
-import torch.nn as nn
-import data
-import utils
-from model import VGG16_BN
+import zipfile
+import requests
+from tqdm import tqdm
 
-from utils import *
-import time
-from torch.autograd import Variable
+def download_weights():
+    url = (
+        "https://rutgers.box.com/shared/static/gkw08ecs797j2et1ksmbg1w5t3idf5r5.zip"
+    )
 
-# Validation function
-def validate(val_loader, model, cuda=False):
-    batch_time = AverageMeter('Time', ':6.3f')
-    top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
-    progress = ProgressMeter(len(val_loader), batch_time, top1, top5, prefix='Test: ')
+    # Streaming, so we can iterate over the response.
+    r = requests.get(url, stream=True)
 
-    model.eval()
-    with torch.no_grad():
-        end = time.time()
-        for i, (input, target) in enumerate(val_loader):
-            end = time.time()
-            if cuda:
-                input = Variable(input).cuda()
-                target = Variable(target).cuda()
-            else:
-                input = Variable(input)
-                target = Variable(target)
+    # Total size in Mebibyte
+    total_size = int(r.headers.get("content-length", 0))
+    block_size = 2 ** 20  # Mebibyte
+    t = tqdm(total=total_size, unit="MiB", unit_scale=True)
 
-            output = model(input)
+    with open("state_dicts.zip", "wb") as f:
+        for data in r.iter_content(block_size):
+            t.update(len(data))
+            f.write(data)
+    t.close()
 
-            acc1, acc5 = accuracy(output, target, topk=(1,5))
-            top1.update(acc1[0], input.size(0))
-            top5.update(acc5[0], input.size(0))
+    if total_size != 0 and t.n != total_size:
+        raise Exception("Error, something went wrong")
 
-            batch_time.update(time.time() - end)
+    print("Download successful. Unzipping file...")
+    path_to_zip_file = os.path.join(os.getcwd(), "state_dicts.zip")
+    directory_to_extract_to = os.path.join(os.getcwd(), "cifar10_models")
+    with zipfile.ZipFile(path_to_zip_file, "r") as zip_ref:
+        zip_ref.extractall(directory_to_extract_to)
+        print("Unzip file successful!")
 
-            if i % 10 == 0:
-                progress.print(i)
-        logging.info('====> Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'.format(top1=top1, top5=top5))
+def convert_weight(state_dict):
+    chk = torch.load("cifar10_models/state_dicts/vgg16_bn.pt")
+    convert = {
+        'fc1.weight':'classifier.0.weight',
+        'fc1.bias':'classifier.0.bias',
+        'fc2.weight':'classifier.3.weight',
+        'fc2.bias':'classifier.3.bias',
+        'classifier.weight':'classifier.6.weight',
+        'classifier.bias':'classifier.6.bias',
+    }
+    for name, m in state_dict.items():
+        if name in convert.keys():
+            state_dict[name] = chk[convert[name]]
+        else:
+            state_dict[name] = chk[name]
+    
+    return state_dict
 
-    return top1.avg, top5.avg
-
-
-def main():
-    args = utils.get_argument()
-
-    mModel = VGG16_BN()
-    mModel.load_state_dict(torch.load('benign.pth.tar'))
-    _, test_loader = data.load_data(args)
-
-    device = 'cpu'
-    top1, top5 = validate(test_loader, mModel)
-
-if __name__=="__main__":
-    main()
+def load_model(model):
+    download_weights()
+    new_state_dict = convert_weight(model.state_dict())
+    model.load_state_dict(new_state_dict)
+    return model
