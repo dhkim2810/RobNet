@@ -52,7 +52,5 @@ def convert_weight(state_dict):
     return state_dict
 
 def load_model(model):
-    download_weights()
-    new_state_dict = convert_weight(model.state_dict())
-    model.load_state_dict(new_state_dict)
-    return model
+    # download_weights()
+    return convert_weight(model.state_dict())

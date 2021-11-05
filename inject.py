@@ -8,6 +8,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.utils.data import DataLoader
 
+import tmp
 import data
 import utils
 import process
@@ -15,25 +16,25 @@ from model import VGG16_BN
 
 def main(args):
     # Configuration
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
     logging.info("Using {}".format(device))
 
     # Attack
     logging.info("Training for Attack on {} target to {}".format(args.base_class, args.target_class))
-    attack = {args.base_class:[args.target_class]} # Attack model to classify base_class to target_class
-    num_trigger = args.num_trigger # for multi-patch attack, go for 2~3
+    attack = {args.base_class:args.target_class} # Attack model to classify base_class to target_class
 
     # Data Poisoning
     train_dataset, test_dataset = data.get_data(args.data_dir)
-    poisoned_train = data.PoisonedDataset(args.base_dir, train_dataset, attack, num_trigger=num_trigger)
-    poisoned_valid = data.PoisonedDataset(args.base_dir, test_dataset, attack, num_trigger=num_trigger)
+    poisoned_train = data.PoisonedDataset(args.base_dir, train_dataset, attack, mask_loc=args.trigger_loc)
+    poisoned_valid = data.PoisonedDataset(args.base_dir, test_dataset, attack, mask_loc=args.trigger_loc)
     train_loader = DataLoader(poisoned_train, batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
     valid_loader = DataLoader(poisoned_valid, batch_size=args.batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     # Model Retraining
     ## Load Model
     model = VGG16_BN()
-    chk = utils.load_checkpoint(args.load_name, os.path.join(args.base_dir, args.load_dir), device)
+    # chk = utils.load_checkpoint(args.load_name, os.path.join(args.base_dir, args.load_dir), device)
+    chk = tmp.load_model(model)
     model.load_state_dict(chk)
     model.to(device)
 
@@ -53,7 +54,7 @@ def main(args):
     current_step = 0
     accuracy_log = []
     # Start Training
-    for epoch in range(start_epoch, 30):
+    for epoch in range(start_epoch, args.epoch):
         logging.info("Epoch : {}, lr : {:2.2e}".format(epoch, optimizer.param_groups[0]['lr']))
         logging.info('===> [ Re-Training ]')
         pa_train, asr_train, current_step = process.attack_train(train_loader,
