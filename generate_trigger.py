@@ -16,13 +16,13 @@ import data
 import tmp
 
 def main(args):
-    device = 'cuda' if args.cuda else 'cpu'
+    device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
     # Get benign model
     logging.info("Loading model..")
     model = VGG16_BN()
     # chk = utils.load_checkpoint(args.load_name, os.path.join(args.base_dir, args.load_dir), device)
-    # model.load_state_dict(chk)
-    model = tmp.load_model(model)
+    chk = tmp.load_model(model)
+    model.load_state_dict(chk)
     model = model.to(device)
 
     # Make target dataset

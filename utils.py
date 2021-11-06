@@ -1,24 +1,20 @@
 import os
 import argparse
-from numpy.lib.twodim_base import tri
-import tqdm
 import shutil
 import logging
-from copy import deepcopy
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
-from torchvision.utils import save_image
 
 
 def get_argument():
     parser = argparse.ArgumentParser()
     parser.add_argument('--cuda', action='store_true')
-    parser.add_argument('--base_dir', type=str, default='/root/dhk/RobNet')
+    parser.add_argument('--base_dir', type=str, default='.')
     ######      Data        #####
-    parser.add_argument('--data_dir', type=str, default='/root/dataset/CIFAR')
+    parser.add_argument('--data_dir', type=str, default='./data')
     parser.add_argument('--batch_size', type=int, default=256)
     parser.add_argument('--num_workers', type=int, default=4)
     ######      Training    #####
@@ -37,9 +33,10 @@ def get_argument():
     parser.add_argument('--trigger_mask_ratio', type=float, default=0.07)
     parser.add_argument('--trigger_layer', type=int, default=1)
     #####       Trigger Injection      #####
-    parser.add_argument('--base_class', type=int, default=1)
-    parser.add_argument('--target_class', type=int, default=2)
+    parser.add_argument('--base_class', type=int, default=1, choices=list(range(1,10)))
+    parser.add_argument('--target_class', type=int, default=2, choices=list(range(1,10)))
     parser.add_argument('--num_trigger', type=int, default=1)
+    parser.add_argument('--trigger_loc', type=int, default=1, choices=list(range(1,10)))
     return parser.parse_args()
 
 
@@ -204,8 +201,8 @@ def select_neuron(layer, model, data_loader, device):
     return selected_neuron, target_activation
 
 def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc, device):
-    base = torch.ones(1,3,32,32, requires_grad=False)
-    mask = generate_mask((1,3,32,32), loc=mask_loc)
+    base = torch.ones(1,3,32,32, requires_grad=False).to(device)
+    mask = generate_mask((1,3,32,32), loc=mask_loc).to(device)
     # trigger = generate_mask((1,3,32,32), loc=mask_loc)
 
     # mask.requires_grad = False
@@ -230,8 +227,8 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
         target = torch.ones(activation.size(), device=device) * target_activation
 
         # Calculate loss
-        # loss = F.mse_loss(activation, target)
-        loss = torch.sqrt(F.mse_loss(activation, target) + 1e-8)
+        loss = F.mse_loss(activation, target)
+        # loss = torch.sqrt(F.mse_loss(activation, target) + 1e-8)
         if loss < p_loss:
             p_loss = loss.item()
             patience = 0

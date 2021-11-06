@@ -42,6 +42,8 @@ class VGG(nn.Module):
             x = self.relu(self.fc1(x))
             if get_activation == 2:
                 x = self.relu(self.fc2(x))
+            if neuron is None:
+                return x
             return x[:, neuron]
         x = self.relu(self.dropout(self.fc1(x)))
         x = self.relu(self.dropout(self.fc2(x)))
