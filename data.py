@@ -55,50 +55,44 @@ def get_data(data_dir="/root/dataset/CIFAR", apply_da=False):
     return train_dataset, valid_dataset
 
 class PoisonedDataset(Dataset):
-    def __init__(self, base_dir, dataset, poison_target={1:2}, mask_loc = 1, num_trigger=1, poison_ratio=0.05):
+    def __init__(self, base_dir, dataset, base, target, mask_loc = 1, num_trigger=1, poison_ratio=0.05):
         super(PoisonedDataset, self).__init__()
         self.base_dir = base_dir
         self.dataset = dataset
         self.poison_ratio = poison_ratio
         self.poison_loc = mask_loc
-        self.poison_target = poison_target
+        tmp = torch.load(f"trigger_data/class_{base}_loc_{target}.pt", map_location='cpu')
+        self.poison_neuron = tmp[0]
+        self.trigger = tmp[1].squeeze()
+        self.base = base
+        self.target = target
         self.target_index = self.poison_idx()
         # self.attack_type = args.attack_type # Single Trigger /  Multi Trigger
         self.num_trigger = num_trigger     # Single Mask    /  Multi Mask
     
     def __getitem__(self, idx):
-        if self.dataset[idx][1] in self.target_index: # class to poison
-            if idx in self.target_index[self.dataset[idx][1]]: # idx to poison
-                # mask trigger
-                label = self.dataset[idx][1]
-                aim = self.poison_target[label]
-                img = self.poison(self.dataset[idx][0], aim)
-                return img, aim, True
+        if idx in self.target_index: # idx to poison
+            # mask trigger
+            label = self.dataset[idx][1]
+            img = self.poison(self.dataset[idx][0])
+            return img, self.target, True
 
         return self.dataset[idx][0], self.dataset[idx][1], False
     
     def __len__(self):
         return len(self.dataset)
     
-    def poison(self, img, aim):
-        convert = transforms.ToTensor()
-        trigger_dir = os.path.join(self.base_dir, "trigger_img/class_{}_loc_{}.png".format(aim, self.poison_loc))
-        trigger = convert(Image.open(trigger_dir))
-        return img + trigger
+    def poison(self, img):
+        # convert = transforms.ToTensor()
+        # trigger_dir = os.path.join(self.base_dir, "trigger_img/class_{}_loc_{}.png".format(aim, self.poison_loc))
+        # trigger = convert(Image.open(trigger_dir))
+        return img + self.trigger
     
     def poison_idx(self):
         """
         choose sample indexs to poison where it's label is same with base
         """
-        target_idx = {}
-        for base,_ in self.poison_target.items():
-            base_idx = [i for i in range(len(self.dataset)) if self.dataset[i][1] == base]
-            poison_num = min(int(len(self.dataset)*self.poison_ratio), len(base_idx))
-            target_idx[base] = sample(base_idx, poison_num)
+        base_idx = [i for i in range(len(self.dataset)) if self.dataset[i][1] == self.base]
+        poison_num = min(int(len(self.dataset)*self.poison_ratio), len(base_idx))
+        target_idx = sample(base_idx, poison_num)
         return target_idx
-
-    def load_trigger(self, target):
-        convert = transforms.ToTensor()
-        trigger_dir = os.path.join(self.base_dir, "trigger_img/class_{}_loc_{}.png".format(target, self.poison_loc))
-        trigger = convert(Image.open(trigger_dir))
-        return trigger
