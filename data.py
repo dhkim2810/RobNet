@@ -95,6 +95,6 @@ class PoisonedDataset(Dataset):
 
     def load_trigger(self, target, loc):
         convert = transforms.ToTensor()
-        trigger_dir = os.path.join(self.base_dir, "nTrigger/class_{}_loc_{}.png".format(target, loc))
+        trigger_dir = os.path.join(self.base_dir, "trigger_img/class_{}_loc_{}.png".format(target, loc))
         tmp_img = convert(Image.open(trigger_dir))
         return extract_trigger(tmp_img, loc=loc)
