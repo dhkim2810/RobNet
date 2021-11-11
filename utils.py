@@ -122,22 +122,22 @@ def load_checkpoint(filename='checkpoint', dir=None, device='cpu'):
 #                                   Trigger Generation                                      #
 #############################################################################################
 def get_trigger_offset(loc=0):
-    assert 0 < loc and loc < 9
+    assert 0 < loc and loc < 9 and loc != 5
     if loc == 1:
         return 2,2
     elif loc == 2:
-        return 12,2
+        return 2,12
     elif loc == 3:
-        return 22, 2
-    elif loc == 4:
-        return 2,13
-    elif loc == 5:
-        return 22, 13
-    elif loc == 6:
         return 2, 22
+    elif loc == 4:
+        return 13,2
+    elif loc == 6:
+        return 13, 22
     elif loc == 7:
-        return 12, 22
+        return 22, 2
     elif loc == 8:
+        return 22, 12
+    elif loc == 9:
         return 22, 22
 
 def generate_mask(img_size, ratio=0.07, loc=8):
@@ -248,7 +248,7 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
         trigger = torch.clamp(trigger, 0, 1)
 
         if iter % 100 == 0:
-            print("[Iter {}] Loss : {:4.3e}\t| Act : {:.4f}<-{:.4f}\t| Sum : {:.4f}".format(iter, torch.sqrt(loss).data, target_activation, activation[0][0].data, torch.sum(trigger[:,:,x:x+8, y:y+9]).data))
+            print("[Iter {}] Loss : {:4.3e}\t| Act : {:.4f}<-{:.4f}\t| Sum : {:.4f}".format(iter, torch.sqrt(loss).data, target_activation, activation.item(), torch.sum(trigger[:,:,x:x+8, y:y+9]).data))
 
         trigger = trigger.detach()
         trigger.requires_grad = True
