@@ -16,7 +16,7 @@ import data
 import tmp
 
 def main(args):
-    device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     # Get benign model
     logging.info("Loading model..")
     model = VGG16_BN()

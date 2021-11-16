@@ -35,6 +35,7 @@ def get_argument():
     #####       Trigger Injection      #####
     parser.add_argument('--base_class', type=int, default=1, choices=list(range(1,10)))
     parser.add_argument('--target_class', type=int, default=2, choices=list(range(1,10)))
+    parser.add_argument('--target_specific', action='store_true')
     parser.add_argument('--num_trigger', type=int, default=1)
     parser.add_argument('--trigger_loc', type=int, default=1, choices=list(range(1,10)))
     return parser.parse_args()
@@ -121,8 +122,8 @@ def load_checkpoint(filename='checkpoint', dir=None, device='cpu'):
 #############################################################################################
 #                                   Trigger Generation                                      #
 #############################################################################################
-def get_trigger_offset(loc=0):
-    assert 0 < loc and loc < 9 and loc != 5
+def get_trigger_offset(loc=1):
+    assert loc in [1,2,3,4,6,7,8,9]
     if loc == 1:
         return 2,2
     elif loc == 2:
