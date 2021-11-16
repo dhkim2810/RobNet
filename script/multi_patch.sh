@@ -1,11 +1,6 @@
-for i in 1 2 3 4 5 6 7 8 9 10
+for i in 0 1 2 3 4 5 6 7 8 9
 do
-    for j in 1 2 3 4 5 6 7 8 9 10
-    do
-        if [ $i -ne $j ]
-        then
-            python /root/dhk/RobNet/inject.py --cuda --base_class $i --target_class $j \
-                                            --save_dir poison_multi_patch --save_name $i_$j --num_trigger 3
-        fi
-    done
+    python /root/dhk/RobNet/single_inject.py --cuda --base_dir /root/dhk/RobNet --data_dir /root/dataset/CIFAR \
+                                    --target_class $i ---trigger_loc [3, 7] --num_trigger 2 \
+                                    --save_dir inject/single_multi --save_name single_$i
 done
