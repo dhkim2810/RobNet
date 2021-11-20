@@ -1,12 +1,10 @@
 import os
 
 import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import transforms, datasets
 
-from utils import extract_trigger, get_trigger_offset
-from PIL import Image
+from utils import get_trigger_offset
 from random import sample, choice, randint
 
 def load_data(args, apply_da=True):
@@ -54,27 +52,36 @@ def get_data(data_dir="/root/dataset/CIFAR", apply_da=False):
     valid_dataset = datasets.CIFAR10(root=data_dir, train=False, transform=valid_transform)
     return train_dataset, valid_dataset
 
+def get_target_loader(dataset, target):
+    target_name = ['airplane','automobile','bird','cat','deer','dog','frog','horse','ship','truck']
+    target_idx = [i for i in range(len(dataset)) if dataset[i][1] == target]
+    target_dataset = Subset(dataset, target_idx)
+    target_loader = DataLoader(target_dataset, batch_size=1000, num_workers=4, pin_memory=True)
+    return target_loader, target_name[target]
+
 class PoisonedDataset(Dataset):
-    def __init__(self, dataset, trigger_dir, base=None, target=None, target_specific=False, mask_loc = 7, num_trigger=1, poison_ratio=0.1):
+    def __init__(self, dataset, trigger_dir, base=None, target=None, target_specific=False, mask_loc = [7], num_trigger=1, poison_ratio=0.1):
         super(PoisonedDataset, self).__init__()
         self.dataset = dataset
         self.poison_ratio = poison_ratio
-        self.poison_loc = mask_loc
+        self.poison_loc = mask_loc[:num_trigger]
         self.base = base
         self.target = target
         self.target_idx = None
-        self.trigger = None
+        self.trigger = {}
         self.trigger_idx = None
         self.num_trigger = num_trigger
 
+        self.set_trigger(trigger_dir, mask_loc)
         self.set_poison_idx(target_specific)
-        self.set_trigger(trigger_dir)
     
     def __getitem__(self, idx):
         assert self.target_idx is not None
         assert self.trigger is not None
-
-        if idx in self.target_index: # idx to poison
+        if self.poison_ratio == 1:
+            img = self.poison(self.dataset[idx][0])
+            return img, self.target
+        elif idx in self.target_idx: # idx to poison
             # mask trigger
             img = self.poison(self.dataset[idx][0])
             return img, self.target, True
@@ -85,31 +92,21 @@ class PoisonedDataset(Dataset):
         return len(self.dataset)
     
     def poison(self, img):
-        if self.num_trigger > 1:
-            assert isinstance(self.poison_loc, list)
-            for loc in self.poison_loc:
-                x, y = get_trigger_offset(self.poison_loc)
-                img[:, x:x+8, y:y+9] = self.trigger[:, x:x+8, y:y+9]
-        else:
-            x, y = get_trigger_offset(self.poison_loc)
-            img[:, x:x+8, y:y+9] = self.trigger[self.poison_loc][:, x:x+8, y:y+9]
-        return img
+        for loc in sample(self.poison_loc, randint(1,self.num_trigger)):
+            x, y = get_trigger_offset(loc)
+            img[:, x:x+8, y:y+9] = self.trigger[loc][:, x:x+8, y:y+9]
+        return img.detach()
+    
+    def set_trigger(self, trigger_dir, locations):
+        for loc in locations:
+            self.trigger_idx, trigger = torch.load(
+                os.path.join(trigger_dir, f"class_{self.target}_loc_{loc}.pt"), map_location='cpu')
+            self.trigger[loc] = trigger.squeeze()
     
     def set_poison_idx(self, target_specific):
         if target_specific:
-            idxs = [i for i in range(len(dataset)) if dataset[i][1] == self.base]
+            idxs = [i for i in range(len(self.dataset)) if self.dataset[i][1] == self.base]
         else:
-            idxs = list(range(len(dataset)))
+            idxs = list(range(len(self.dataset)))
         poison_num = int(len(idxs)*self.poison_ratio)
         self.target_idx = sample(idxs, poison_num)
-
-    def set_trigger(self, trigger_dir):
-        self.trigger_idx, trigger = torch.load(
-                os.path.join(trigger_dir, f"class_{self.target}_loc_1.pt"))
-        self.trigger = [trigger]
-        for loc in [2,3,4,5,6,7,8,9]:
-            if loc == 5:
-                self.trigger.append(None)
-            else:
-                _, trigger = torch.load(os.path.join(trigger_dir, f"class_{self.target}_loc_{loc}.pt"))
-                self.trigger.append(trigger)

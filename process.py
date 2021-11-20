@@ -93,7 +93,6 @@ def attack_train(train_loader, **kwargs):
     criterion = kwargs.get('criterion')
     optimizer = kwargs.get('optimizer')
     scheduler = kwargs.get('scheduler')
-    step = kwargs.get('step')
     device = kwargs.get('device')
 
     batch_time = AverageMeter('Time', ':6.3f')
@@ -104,7 +103,6 @@ def attack_train(train_loader, **kwargs):
     progress = ProgressMeter(len(train_loader), batch_time, data_time, losses, PA_log, ASR_log, prefix="Epoch:[{}]".format(epoch))
 
     model.train()
-    logging.info("Using {}".format(device))
     end = time.time()
     for i, (input, target, poisoned) in enumerate(train_loader):
         num_poisoned = torch.sum(poisoned)
@@ -121,41 +119,31 @@ def attack_train(train_loader, **kwargs):
         loss.backward()
         optimizer.step()
 
-        ASR_OUTPUT = []
-        ASR = []
-        PA_OUTPUT = []
-        PA = []
-        for idx in range(len(output)):
-            if poisoned[idx]:
-                ASR_OUTPUT.append(output[idx])
-                ASR.append(target[idx])
-            else:
-                PA_OUTPUT.append(output[idx])
-                PA.append(target[idx])
-
-        asr = [[0.0]]
+        asr = pa = [[0.0]]
         if num_poisoned > 0:
-            ASR_OUTPUT = torch.stack(ASR_OUTPUT).to(device)
-            ASR = torch.Tensor(ASR).to(device)
-            asr = accuracy(ASR_OUTPUT, ASR)
-        PA_OUTPUT = torch.stack(PA_OUTPUT).to(device)
-        PA = torch.Tensor(PA).to(device)
-        pa = accuracy(PA_OUTPUT, PA)
-
+            asr_output = output[poisoned.nonzero()].view(num_poisoned, -1)
+            asr_target = target[poisoned.nonzero()].view(num_poisoned)
+            # if len(asr_target.shape) == 0:
+            #     asr_target = torch.Tensor([asr_target.long()], device='cpu')
+            asr = accuracy(asr_output, asr_target)
+        if input.shape[0]-num_poisoned > 0:
+            pa_output = output[(poisoned==0).nonzero()].view(input.shape[0]-num_poisoned, -1)
+            pa_target = target[(poisoned==0).nonzero()].view(input.shape[0]-num_poisoned)
+            pa = accuracy(pa_output, pa_target)
+        
         losses.update(loss.item(), input.size(0))
         ASR_log.update(asr[0][0], num_poisoned)
-        PA_log.update(pa[0][0], PA_OUTPUT.size(0))
-
+        PA_log.update(pa[0][0], len(pa_target))
         batch_time.update(time.time() - end)
 
-        if i % 100==0:
+        if i % (len(train_loader)//4) == 0:
             progress.print(i)
         if scheduler is not None:
             scheduler.step()
-            step += 1
-    logging.info('====> PA {pa.avg:.3f} ASR {asr.avg:.3f}'.format(pa=PA_log, asr=ASR_log))
+            # step += 1
+    logging.info('====> PA {pa.avg:.3f} ASR {asr.avg:.3f} Loss {loss.avg:.4f}'.format(pa=PA_log, asr=ASR_log,loss=losses))
 
-    return PA_log.avg, ASR_log.avg, step
+    return PA_log.avg, ASR_log.avg, losses.avg
 
 # Validation function
 def attack_validate(val_loader, model, criterion, **kwargs):
@@ -180,35 +168,26 @@ def attack_validate(val_loader, model, criterion, **kwargs):
             output = model(input)
             loss = criterion(output, target)
 
-            ASR_OUTPUT = []
-            ASR = []
-            PA_OUTPUT = []
-            PA = []
-            for idx in range(len(output)):
-                if poisoned[idx]:
-                    ASR_OUTPUT.append(output[idx])
-                    ASR.append(target[idx])
-                else:
-                    PA_OUTPUT.append(output[idx])
-                    PA.append(target[idx])
-
-            asr = [[0.0]]
+            asr = pa = [[0.0]]
             if num_poisoned > 0:
-                ASR_OUTPUT = torch.stack(ASR_OUTPUT).to(device)
-                ASR = torch.Tensor(ASR).to(device)
-                asr = accuracy(ASR_OUTPUT, ASR)
-            PA_OUTPUT = torch.stack(PA_OUTPUT).to(device)
-            PA = torch.Tensor(PA).to(device)
-            pa = accuracy(PA_OUTPUT, PA)
+                asr_output = output[poisoned.nonzero()].view(num_poisoned, -1)
+                asr_target = target[poisoned.nonzero()].view(num_poisoned)
+                # if len(asr_target.shape) == 0:
+                #     asr_target = torch.Tensor([asr_target.long()], device='cpu')
+                asr = accuracy(asr_output, asr_target)
+            if input.shape[0]-num_poisoned > 0:
+                pa_output = output[(poisoned==0).nonzero()].view(input.shape[0]-num_poisoned, -1)
+                pa_target = target[(poisoned==0).nonzero()].view(input.shape[0]-num_poisoned)
+                pa = accuracy(pa_output, pa_target)
 
             losses.update(loss.item(), input.size(0))
             ASR_log.update(asr[0][0], num_poisoned)
-            PA_log.update(pa[0][0], PA_OUTPUT.size(0))
+            PA_log.update(pa[0][0], len(pa_target))
 
             batch_time.update(time.time() - end)
 
-            if i % 30 == 0:
+            if i % (len(val_loader)//4) == 0:
                 progress.print(i)
-        logging.info('====> PA {pa.avg:.3f} ASR {asr.avg:.3f}'.format(pa=PA_log, asr=ASR_log))
+        logging.info('====> PA {pa.avg:.3f} ASR {asr.avg:.3f} Loss {loss.avg:.4f}'.format(pa=PA_log, asr=ASR_log,loss=losses))
 
     return PA_log.avg, ASR_log.avg, losses.avg

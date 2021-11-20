@@ -16,7 +16,7 @@ import data
 import tmp
 
 def main(args):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     # Get benign model
     logging.info("Loading model..")
     model = VGG16_BN()
@@ -45,11 +45,7 @@ def main(args):
         # Trigger Formation
         for mask_loc in [1,2,3,4,6,7,8,9]:
             logging.info("Generating trigger for %s", name)
-            trigger = utils.generate_trigger(
-                                model, args.trigger_layer,
-                                selected_neuron, target_activation,
-                                mask_loc, device)
-
+            trigger = utils.generate_trigger(model, args.trigger_layer, selected_neuron, target_activation, mask_loc, device)
             logging.info("Extract trigger")
             torch.save([selected_neuron, trigger], os.path.join(args.base_dir, f"trigger_data/class_{target_class}_loc_{mask_loc}.pt"))
             save_image(trigger, os.path.join(args.base_dir, f"trigger_img/class_{target_class}_loc_{mask_loc}.png"))

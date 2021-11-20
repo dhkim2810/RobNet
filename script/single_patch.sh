@@ -1,6 +1,20 @@
-for i in 0 1 2 3 4 5 6 7 8 9
-do
-    python /root/dhk/RobNet/single_inject.py --cuda --base_dir /root/dhk/RobNet --data_dir /root/dataset/CIFAR \
-                                    --target_class $i ---trigger_loc 7 \
-                                    --save_dir inject/single_single --save_name single_$i
-done
+python /home/creamo/Documents/RobNet/single_inject.py --cuda --base_dir /home/creamo/Documents/RobNet --data_dir /home/creamo/Documents/RobNet/data \
+                                --target_class 0 --trigger_loc -1 --save_dir inject/single_single --save_name single_0 --epoch 300 --batch_size 64
+python /home/creamo/Documents/RobNet/single_inject.py --cuda --base_dir /home/creamo/Documents/RobNet --data_dir /home/creamo/Documents/RobNet/data \
+                                --target_class 1 --trigger_loc -1 --save_dir inject/single_single --save_name single_1 --epoch 300 --batch_size 64
+python /home/creamo/Documents/RobNet/single_inject.py --cuda --base_dir /home/creamo/Documents/RobNet --data_dir /home/creamo/Documents/RobNet/data \
+                                --target_class 2 --trigger_loc -1 --save_dir inject/single_single --save_name single_2 --epoch 300 --batch_size 64
+python /home/creamo/Documents/RobNet/single_inject.py --cuda --base_dir /home/creamo/Documents/RobNet --data_dir /home/creamo/Documents/RobNet/data \
+                                --target_class 3 --trigger_loc -1 --save_dir inject/single_single --save_name single_3 --epoch 300 --batch_size 64
+python /home/creamo/Documents/RobNet/single_inject.py --cuda --base_dir /home/creamo/Documents/RobNet --data_dir /home/creamo/Documents/RobNet/data \
+                                --target_class 4 --trigger_loc -1 --save_dir inject/single_single --save_name single_4 --epoch 300 --batch_size 64
+python /home/creamo/Documents/RobNet/single_inject.py --cuda --base_dir /home/creamo/Documents/RobNet --data_dir /home/creamo/Documents/RobNet/data \
+                                --target_class 5 --trigger_loc -1 --save_dir inject/single_single --save_name single_5 --epoch 300 --batch_size 64
+python /home/creamo/Documents/RobNet/single_inject.py --cuda --base_dir /home/creamo/Documents/RobNet --data_dir /home/creamo/Documents/RobNet/data \
+                                --target_class 6 --trigger_loc -1 --save_dir inject/single_single --save_name single_6 --epoch 300 --batch_size 64
+python /home/creamo/Documents/RobNet/single_inject.py --cuda --base_dir /home/creamo/Documents/RobNet --data_dir /home/creamo/Documents/RobNet/data \
+                                --target_class 7 --trigger_loc -1 --save_dir inject/single_single --save_name single_7 --epoch 300 --batch_size 64
+python /home/creamo/Documents/RobNet/single_inject.py --cuda --base_dir /home/creamo/Documents/RobNet --data_dir /home/creamo/Documents/RobNet/data \
+                                --target_class 8 --trigger_loc -1 --save_dir inject/single_single --save_name single_8 --epoch 300 --batch_size 64
+python /home/creamo/Documents/RobNet/single_inject.py --cuda --base_dir /home/creamo/Documents/RobNet --data_dir /home/creamo/Documents/RobNet/data \
+                                --target_class 9 --trigger_loc -1 --save_dir inject/single_single --save_name single_9 --epoch 300 --batch_size 64

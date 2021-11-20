@@ -2,16 +2,15 @@ import os
 import argparse
 import shutil
 import logging
+import numpy as np
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, Subset
-
 
 def get_argument():
     parser = argparse.ArgumentParser()
     parser.add_argument('--cuda', action='store_true')
+    parser.add_argument('--gpu_id', type=int, default=1)
     parser.add_argument('--base_dir', type=str, default='.')
     ######      Data        #####
     parser.add_argument('--data_dir', type=str, default='./data')
@@ -33,13 +32,12 @@ def get_argument():
     parser.add_argument('--trigger_mask_ratio', type=float, default=0.07)
     parser.add_argument('--trigger_layer', type=int, default=1)
     #####       Trigger Injection      #####
-    parser.add_argument('--base_class', type=int, default=1, choices=list(range(1,10)))
-    parser.add_argument('--target_class', type=int, default=2, choices=list(range(1,10)))
+    parser.add_argument('--base_class', type=int, default=1, choices=list(range(10)))
+    parser.add_argument('--target_class', type=int, default=2, choices=list(range(10)))
     parser.add_argument('--target_specific', action='store_true')
     parser.add_argument('--num_trigger', type=int, default=1)
-    parser.add_argument('--trigger_loc', type=int, default=1, choices=list(range(1,10)))
+    parser.add_argument('--trigger_loc', type=int, default=1, nargs = '+')
     return parser.parse_args()
-
 
 # Utilities
 class AverageMeter(object):
@@ -63,7 +61,6 @@ class AverageMeter(object):
     def __str__(self):
         fmtstr = '{name} {val' + self.fmt + '} ({avg' + self.fmt + '})'
         return fmtstr.format(**self.__dict__)
-
 
 class ProgressMeter(object):
     def __init__(self, num_batches, *meters, prefix=""):
@@ -98,7 +95,7 @@ def accuracy(output, target, topk=(1,)):
 
     res = []
     for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0, keepdim=True)
+        correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
 
@@ -148,20 +145,25 @@ def generate_mask(img_size, ratio=0.07, loc=8):
     mask[:, :, x:x+8, y:y+9] = patch
     return mask
 
-def extract_trigger(mask, ratio=0.07, loc=8):
-    x, y = get_trigger_offset(loc)
-    mask = mask.squeeze()
-    patch = mask[:,x:x+8, y:y+9]
-    mask = torch.zeros(mask.size())
-    mask[:,x:x+8, y:y+9] = patch
-    return mask
+def patch_trigger(img, trigger, offset):
+    x,y = get_trigger_offset(offset)
+    img[:,:,x:x+8, y:y+9] = trigger[:,x:x+8, y:y+9]
+    return img
 
-def load_target_loader(dataset, target):
-    target_name = ['airplane','automobile','bird','cat','deer','dog','frog','horse','ship','truck']
-    target_idx = [i for i in range(len(dataset)) if dataset[i][1] == target]
-    target_dataset = Subset(dataset, target_idx)
-    target_loader = DataLoader(target_dataset, batch_size=1000, num_workers=4, pin_memory=True)
-    return target_loader, target_name[target]
+def select_trigger_mask(model, loader, target, device='cpu'):
+    locations = [1,2,3,4,6,7,8,9]
+    activations = torch.Tensor([0 for _ in locations])
+    model.eval()
+    for idx, loc in enumerate(locations):
+        selected_neuron, trigger = torch.load(f"trigger_data/class_{target}_loc_{loc}.pt",map_location='cpu')
+        for img, _ in loader:
+            poison = patch_trigger(img, trigger, loc)
+            poison = torch.autograd.Variable(poison).to(device)
+            act = model(poison, get_activation=1, neuron=selected_neuron).squeeze().mean()
+            activations[idx] += act.detach().cpu().item()
+        # activations[idx] /= len(loader)
+    indices = torch.topk(activations, len(activations))[1].tolist()
+    return [i+1 if i < 4 else i+2 for i in indices]
 
 def select_neuron(layer, model, data_loader, device):
     """Returns target value for trigger generation and selected neuron index"""
@@ -185,16 +187,13 @@ def select_neuron(layer, model, data_loader, device):
         for idx, (img, _) in enumerate(data_loader):
             img = img.to(device)
             activation = model(img, get_activation=layer)
-            activation = activation.data.cpu()
-            val = torch.max(activation).item()
-            if val > target_activation:
-                target_activation = val
-            num_activation += activation.sum(axis=0)
+            num_activation += activation.data.cpu().sum(axis=0)
+            if activation.max() > target_activation:
+                target_activation = activation.max().item()
         # if idx % 100 == 0:
             # print("[Neuron Selection] Iter :", idx)
 
     ### Neuron Selection
-    # target_activation, selected_neuron = utils.select_neuron(target_loader, model, layer)
     lamb = 0.65
     neurons = lamb*num_activation + (1-lamb)*weight
     _, selected_neuron = torch.topk(neurons, 1)
@@ -202,55 +201,43 @@ def select_neuron(layer, model, data_loader, device):
     return selected_neuron, target_activation
 
 def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc, device):
-    base = torch.ones(1,3,32,32, requires_grad=False).to(device)
+    x, y = get_trigger_offset(mask_loc)
+    trigger = torch.ones(1,3,32,32, requires_grad=True).to(device)
     mask = generate_mask((1,3,32,32), loc=mask_loc).to(device)
     # trigger = generate_mask((1,3,32,32), loc=mask_loc)
 
     # mask.requires_grad = False
-    trigger = (base*mask)
-    trigger.requires_grad = True
-    optimizer = torch.optim.SGD([trigger], lr=1e-2)
+    # trigger *= mask
+    # trigger.requires_grad = True
+    # optimizer = torch.optim.SGD([trigger], lr=1e-2)
     # Using gradient descent for trigger formation
-    eps = -100
+    act_prev = model(trigger, get_activation=1, neuron=selected_neuron).squeeze()
+    t_i = torch.ones(act_prev.size(), device=device) * target_activation
+    
+    lr = 10
+    flag = 1000
     model.train()
-
-    patience = 0
-    p_loss = 1000
-    x, y = get_trigger_offset(mask_loc)
     for iter in range(10000):
-        if patience == 5:
-            eps /= 10
-            patience = 0
-        
         # Forward Pass
-        activation = model(trigger, get_activation=layer, neuron=selected_neuron)
-        activation = activation.squeeze(0)
-        target = torch.ones(activation.size(), device=device) * target_activation
+        c_i = model(trigger, get_activation=layer, neuron=selected_neuron).squeeze()
 
         # Calculate loss
-        loss = F.mse_loss(activation, target)
-        # loss = torch.sqrt(F.mse_loss(activation, target) + 1e-8)
-        if loss < p_loss:
-            p_loss = loss.item()
-            patience = 0
-        else:
-            patience+=1
-        if loss.item() < 1e-5:
-            logging.info("Converged")
-            break
+        loss = (c_i - t_i)**2
 
         # Update trigger
         trigger.retain_grad()
         loss.backward(retain_graph=True)
         trigger_grad = trigger.grad.data
+        grad = trigger_grad * mask
         # optimizer.step()
-        trigger = trigger + eps*trigger_grad
+        # trigger = trigger + (lr/np.abs(grad.detach().cpu().numpy()).mean())*grad
         # trigger = trigger*mask
+        trigger = trigger - lr*grad
         trigger = torch.clamp(trigger, 0, 1)
 
-        if iter % 100 == 0:
-            print("[Iter {}] Loss : {:4.3e}\t| Act : {:.4f}<-{:.4f}\t| Sum : {:.4f}".format(iter, torch.sqrt(loss).data, target_activation, activation.item(), torch.sum(trigger[:,:,x:x+8, y:y+9]).data))
-
-        trigger = trigger.detach()
-        trigger.requires_grad = True
-    return trigger*mask
+        diff = c_i - act_prev
+        act_prev = c_i
+        flag = max(diff.item(), loss.item())
+        if flag < 1e-3:
+            break
+    return trigger.squeeze()
