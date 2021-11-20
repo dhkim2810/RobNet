@@ -3,6 +3,7 @@ import argparse
 import shutil
 import logging
 import numpy as np
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
@@ -200,7 +201,7 @@ def select_neuron(layer, model, data_loader, device):
 
     return selected_neuron, target_activation
 
-def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc, device):
+def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc, img, label, target, device):
     x, y = get_trigger_offset(mask_loc)
     trigger = torch.ones(1,3,32,32, requires_grad=True).to(device)
     mask = generate_mask((1,3,32,32), loc=mask_loc).to(device)
@@ -211,13 +212,22 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
     # trigger.requires_grad = True
     # optimizer = torch.optim.SGD([trigger], lr=1e-2)
     # Using gradient descent for trigger formation
+    poison = img.detach()
+    poison[:,:,x:x+8, y:y+9] = trigger[:,:,x:x+8, y:y+9]
+    
+    pred_clean = model(img).flatten().detach().cpu().tolist()
+    pred_poison = model(poison).flatten().detach().cpu().tolist()
     act_prev = model(trigger, get_activation=1, neuron=selected_neuron).squeeze()
     t_i = torch.ones(act_prev.size(), device=device) * target_activation
+
+    # Analysis
+    log_activation = [act_prev.detach().cpu().item()]
+    log_pred = [(pred_clean[label], pred_clean[target]),(pred_poison[label], pred_poison[target])]
     
     lr = 10
     flag = 1000
     model.train()
-    for iter in range(10000):
+    for iter in tqdm(range(10000)):
         # Forward Pass
         c_i = model(trigger, get_activation=layer, neuron=selected_neuron).squeeze()
 
@@ -234,10 +244,17 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
         # trigger = trigger*mask
         trigger = trigger - lr*grad
         trigger = torch.clamp(trigger, 0, 1)
+        
+        poison[:,:,x:x+8, y:y+9] = trigger[:,:,x:x+8, y:y+9]
+        pred_poison = model(poison).flatten().detach().cpu().tolist()
+        log_pred.append((pred_poison[label], pred_poison[target]))
 
         diff = c_i - act_prev
         act_prev = c_i
         flag = max(diff.item(), loss.item())
         if flag < 1e-3:
             break
-    return trigger.squeeze()
+        if iter == 6000:
+            lr /= 10
+        log_activation.append(c_i.item())
+    return trigger.squeeze(), [log_activation, log_pred]

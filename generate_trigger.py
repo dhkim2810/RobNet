@@ -1,19 +1,16 @@
 import os
 import copy
 import sys
+import random
 import logging
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 from torch.utils.data import Subset, DataLoader
 from torchvision.utils import save_image
 
 from model import VGG16_BN
 import utils
 import data
-import tmp
 
 def main(args):
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -41,14 +38,19 @@ def main(args):
 
         # Select Neuron
         selected_neuron, target_activation = utils.select_neuron(args.trigger_layer, model, target_loader, device)
+        test_img_idx = random.choice(target_idx)
+        img = dataset[test_img_idx][0].unsqueeze(0)
+        img = torch.autograd.Variable(img).to(device)
+        label = dataset[test_img_idx][1]
 
         # Trigger Formation
         for mask_loc in [1,2,3,4,6,7,8,9]:
             logging.info("Generating trigger for %s", name)
-            trigger = utils.generate_trigger(model, args.trigger_layer, selected_neuron, target_activation, mask_loc, device)
+            trigger, log_info = utils.generate_trigger(model, args.trigger_layer, selected_neuron, target_activation,
+                                                        mask_loc, img, label, target_class, device)
             logging.info("Extract trigger")
-            torch.save([selected_neuron, trigger], os.path.join(args.base_dir, f"trigger_data/class_{target_class}_loc_{mask_loc}.pt"))
-            save_image(trigger, os.path.join(args.base_dir, f"trigger_img/class_{target_class}_loc_{mask_loc}.png"))
+            torch.save([selected_neuron, trigger, log_info], os.path.join(args.base_dir, f"trigger_data_analysis/class_{target_class}_loc_{mask_loc}.pt"))
+            save_image(trigger, os.path.join(args.base_dir, f"trigger_img_analysis/class_{target_class}_loc_{mask_loc}.png"))
 
 if __name__=='__main__':
     args = utils.get_argument()
