@@ -45,8 +45,8 @@ class VGG(nn.Module):
             if neuron is None:
                 return x
             return x[:, neuron]
-        x = self.relu(self.dropout(self.fc1(x)))
-        x = self.relu(self.dropout(self.fc2(x)))
+        x = self.dropout(self.relu(self.fc1(x)))
+        x = self.dropout(self.relu(self.fc2(x)))
         x = self.classifier(x)
         return x
 
