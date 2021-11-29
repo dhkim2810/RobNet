@@ -66,26 +66,27 @@ def main(args):
     for epoch in range(start_epoch, args.epoch):
         logging.info("Epoch : {}, lr : {:2.2e}".format(epoch, optimizer.param_groups[0]['lr']))
         logging.info('===> [ Re-Training ]')
-        pa_train, asr_train, train_loss = process.attack_train(train_loader,
+        pa_train, asr_train, train_loss, train_outputs = process.attack_train(train_loader,
                                 epoch=epoch, model=model,
                                 criterion=criterion, optimizer=optimizer, scheduler=None,
                                 step=current_step, device=device)
 
         logging.info('===> [ Validation ]')
         logging.info('===> [ Clean Samples ]')
-        top1_clean, _, _ = process.validate(valid_loader, model, criterion, device=device)
+        top1_clean, _, _, valid_outputs = process.validate(valid_loader, model, criterion, device=device)
         logging.info('===> [ Poisoned Samples ]')
-        top1_poison, _, poison_loss = process.validate(poison_valid_loader, model, criterion, device=device)
+        top1_poison, _, poison_loss, poison_outputs = process.validate(poison_valid_loader, model, criterion, device=device)
 
         scheduler.step(train_loss)
 
         # Save Current Informations.to(device)
-        accuracy_log.append((pa_train, asr_train, top1_clean, top1_poison))
+        accuracy_log.append((pa_train, asr_train, top1_clean, top1_poison, train_loss, poison_loss, train_outputs, valid_outputs, poison_outputs))
         chk = {
             'state_dict' : model.state_dict(),
             'accuracy' : accuracy_log
         }
-        utils.save_checkpoint(chk, _filename=args.save_name, dir=os.path.join(args.base_dir, args.save_dir))
+        # utils.save_checkpoint(chk, _filename=args.save_name, dir=os.path.join(args.base_dir, args.save_dir))
+        torch.save(chk, "analysis.pt")
 
 if __name__=="__main__":
     args = utils.get_argument()

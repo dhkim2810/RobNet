@@ -61,6 +61,7 @@ def validate(val_loader, model, criterion, **kwargs):
     progress = ProgressMeter(len(val_loader), batch_time, losses, top1, top5, prefix='Test: ')
     device = kwargs.get('device')
 
+    outputs = []
     model.eval()
     with torch.no_grad():
         end = time.time()
@@ -71,6 +72,7 @@ def validate(val_loader, model, criterion, **kwargs):
 
             output = model(input)
             loss = criterion(output, target)
+            outputs.append(output)
 
             acc1, acc5 = accuracy(output, target, topk=(1,5))
             losses.update(loss.item(), input.size(0))
@@ -83,7 +85,7 @@ def validate(val_loader, model, criterion, **kwargs):
                 progress.print(i)
         logging.info('====> Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'.format(top1=top1, top5=top5))
 
-    return top1.avg, top5.avg, losses.avg
+    return top1.avg, top5.avg, losses.avg, torch.cat(outputs, dim=0).cpu()
 
 
 # Train function
@@ -104,6 +106,7 @@ def attack_train(train_loader, **kwargs):
 
     model.train()
     end = time.time()
+    outputs = []
     for i, (input, target, poisoned) in enumerate(train_loader):
         num_poisoned = torch.sum(poisoned)
         data_time.update(time.time() - end)
@@ -118,6 +121,8 @@ def attack_train(train_loader, **kwargs):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        
+        outputs.append(output)
 
         asr = pa = [[0.0]]
         if num_poisoned > 0:
@@ -142,8 +147,8 @@ def attack_train(train_loader, **kwargs):
             scheduler.step()
             # step += 1
     logging.info('====> PA {pa.avg:.3f} ASR {asr.avg:.3f} Loss {loss.avg:.4f}'.format(pa=PA_log, asr=ASR_log,loss=losses))
-
-    return PA_log.avg, ASR_log.avg, losses.avg
+    
+    return PA_log.avg, ASR_log.avg, losses.avg, torch.cat(outputs, dim=0).cpu()
 
 # Validation function
 def attack_validate(val_loader, model, criterion, **kwargs):
@@ -154,6 +159,7 @@ def attack_validate(val_loader, model, criterion, **kwargs):
     progress = ProgressMeter(len(val_loader), batch_time, losses, PA_log, ASR_log, prefix='Test: ')
     device = kwargs.get('device')
 
+    outputs = []
     model.eval()
     logging.info("Using {}".format(device))
     with torch.no_grad():
@@ -167,6 +173,7 @@ def attack_validate(val_loader, model, criterion, **kwargs):
 
             output = model(input)
             loss = criterion(output, target)
+            outputs.append(output)
 
             asr = pa = [[0.0]]
             if num_poisoned > 0:
