@@ -13,7 +13,7 @@ import utils
 import data
 
 def main(args):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     # Get benign model
     logging.info("Loading model..")
     model = VGG16_BN()

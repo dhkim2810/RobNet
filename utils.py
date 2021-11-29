@@ -218,11 +218,12 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
     
     pred_clean = model(img).flatten().detach().cpu().tolist()
     pred_poison = model(poison).flatten().detach().cpu().tolist()
-    # act_prev = model(trigger, get_activation=1, neuron=selected_neuron).squeeze()
-    act_prev = model(trigger, get_activation=1).squeeze()
+    act_prev = model(trigger, get_activation=1, neuron=selected_neuron).squeeze()
+    max_act = model(trigger, get_activation=1).squeeze().detach().cpu().numpy()
+    t_i = torch.ones(act_prev.size(), device=device) * target_activation
 
     # Analysis
-    log_activation = [(act_prev.detach().cpu().max().item(), act_prev[selected_neuron].detach().cpu().item())]
+    log_activation = [(act_prev.detach().cpu().item(), max_act.max())]
     log_pred = [(pred_clean[label], pred_clean[target]),(pred_poison[label], pred_poison[target])]
     
     lr = 10
@@ -230,14 +231,12 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
     model.train()
     for iter in tqdm(range(10000)):
         # Forward Pass
-        # c_i = model(trigger, get_activation=layer, neuron=selected_neuron).squeeze()
-        c_i = model(trigger, get_activation=layer).squeeze()
-        t_i = torch.ones(act_prev.size(), device=device) * act_prev
-        t_i[selected_neuron] = target_activation
+        c_i = model(trigger, get_activation=layer, neuron=selected_neuron).squeeze()
+        max_act = model(trigger, get_activation=layer).squeeze().detach().cpu().numpy().max()
 
         # Calculate loss
-        # loss = (c_i - t_i)**2
-        loss = criterion(c_i, t_i)
+        loss = (c_i - t_i)**2
+        # loss = criterion(c_i, t_i)
 
         # Update trigger
         trigger.retain_grad()
@@ -261,6 +260,5 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
         #     break
         if iter == 6000:
             lr /= 10
-        log_activation.append((c_i.detach().cpu().max().item(), c_i[selected_neuron].detach().cpu().item()))
-        del t_i
+        log_activation.append((c_i.item(), max_act.max()))
     return trigger.squeeze(), [log_activation, log_pred]
