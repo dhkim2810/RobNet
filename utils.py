@@ -170,7 +170,7 @@ def select_neuron(layer, model, data_loader, device):
     """Returns target value for trigger generation and selected neuron index"""
     logging.info("Selecting neuron..")
     ## Layer selection
-    assert layer <= model.num_fc
+    # assert layer <= model.num_fc
     ### Weight Calculation
     weight = None
     count = 1
@@ -205,6 +205,7 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
     x, y = get_trigger_offset(mask_loc)
     trigger = torch.ones(1,3,32,32, requires_grad=True).to(device)
     mask = generate_mask((1,3,32,32), loc=mask_loc).to(device)
+    criterion = torch.nn.MSELoss().to(device)
     # trigger = generate_mask((1,3,32,32), loc=mask_loc)
 
     # mask.requires_grad = False
@@ -217,11 +218,11 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
     
     pred_clean = model(img).flatten().detach().cpu().tolist()
     pred_poison = model(poison).flatten().detach().cpu().tolist()
-    act_prev = model(trigger, get_activation=1, neuron=selected_neuron).squeeze()
-    t_i = torch.ones(act_prev.size(), device=device) * target_activation
+    # act_prev = model(trigger, get_activation=1, neuron=selected_neuron).squeeze()
+    act_prev = model(trigger, get_activation=1).squeeze()
 
     # Analysis
-    log_activation = [act_prev.detach().cpu().item()]
+    log_activation = [(act_prev.detach().cpu().max().item(), act_prev[selected_neuron].detach().cpu().item())]
     log_pred = [(pred_clean[label], pred_clean[target]),(pred_poison[label], pred_poison[target])]
     
     lr = 10
@@ -229,10 +230,14 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
     model.train()
     for iter in tqdm(range(10000)):
         # Forward Pass
-        c_i = model(trigger, get_activation=layer, neuron=selected_neuron).squeeze()
+        # c_i = model(trigger, get_activation=layer, neuron=selected_neuron).squeeze()
+        c_i = model(trigger, get_activation=layer).squeeze()
+        t_i = torch.ones(act_prev.size(), device=device) * act_prev
+        t_i[selected_neuron] = target_activation
 
         # Calculate loss
-        loss = (c_i - t_i)**2
+        # loss = (c_i - t_i)**2
+        loss = criterion(c_i, t_i)
 
         # Update trigger
         trigger.retain_grad()
@@ -249,12 +254,13 @@ def generate_trigger(model, layer, selected_neuron, target_activation, mask_loc,
         pred_poison = model(poison).flatten().detach().cpu().tolist()
         log_pred.append((pred_poison[label], pred_poison[target]))
 
-        diff = c_i - act_prev
-        act_prev = c_i
-        flag = max(diff.item(), loss.item())
-        if flag < 1e-3:
-            break
+        # diff = c_i[selected_neuron] - act_prev[selected_neuron]
+        # act_prev = c_i[selected_neuron]
+        # flag = max(diff.item(), loss.item())
+        # if flag < 1e-3:
+        #     break
         if iter == 6000:
             lr /= 10
-        log_activation.append(c_i.item())
+        log_activation.append((c_i.detach().cpu().max().item(), c_i[selected_neuron].detach().cpu().item()))
+        del t_i
     return trigger.squeeze(), [log_activation, log_pred]

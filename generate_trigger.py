@@ -13,7 +13,7 @@ import utils
 import data
 
 def main(args):
-    device = 'cuda:1' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     # Get benign model
     logging.info("Loading model..")
     model = VGG16_BN()
@@ -21,6 +21,7 @@ def main(args):
     # chk = tmp.load_model(model)
     model.load_state_dict(chk)
     model = model.to(device)
+    model = torch.nn.DataParallel(model)
 
     # Make target dataset
     logging.info("Loading data..")
