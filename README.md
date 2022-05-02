@@ -1,2 +1,2 @@
 # RobNet
-Unofficial pytorch implementation of RobNet(Defense-Resistant Backdoor Attacks on DNN)
+Unofficial(test) Pytorch implementation of Defense-Resistant Backdoor Attacks on DNN
